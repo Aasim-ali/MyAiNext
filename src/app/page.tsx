@@ -5,14 +5,7 @@ import {
   Menu, Search, Mic, Send, Loader2, Sparkles, Plus, MessageSquare, Trash2
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
-import rehypeRaw from "rehype-raw";
-import rehypeKatex from "rehype-katex";
-import "highlight.js/styles/github.css"; // ya github-dark
-import "katex/dist/katex.min.css";
+import MarkdownRenderer from "./Markdown";
 
 
 type Message = { id: string; role: "user" | "model"; content: string };
@@ -486,12 +479,7 @@ export default function Home() {
                         AI Overview
                       </div>
                       <div className="prose">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeHighlight, rehypeRaw, rehypeKatex]}
-                        >
-                          {m.content}
-                        </ReactMarkdown>
+                        <MarkdownRenderer content={m.content} />
                       </div>
                     </div>
                   )}
