@@ -198,12 +198,20 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, history: active.messages.slice(-5) }),
       });
-      if (!res.ok) throw new Error("Network error");
-      const json = await res.json();
+      
+      const json = await res.json().catch(() => ({}));
+      
+      if (!res.ok) {
+        throw new Error(json.error || "Network error");
+      }
+
       const aiMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: json.response || json.error || "Error." };
       setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, messages: [...c.messages, aiMsg], updatedAt: Date.now() } : c));
-    } catch {
-      const errMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: "Sorry, I couldn't reach the server. Make sure the backend is running." };
+    } catch (err: any) {
+      const errorContent = err.message && err.message !== "Network error" && err.message !== "Failed to fetch" 
+        ? err.message 
+        : "Sorry, I couldn't reach the server. Make sure the backend is running.";
+      const errMsg: Message = { id: (Date.now() + 1).toString(), role: "model", content: errorContent };
       setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() } : c));
     } finally { setIsLoading(false); }
   }
