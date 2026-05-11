@@ -24,6 +24,7 @@ export default function Home() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/chat/";
 
   const { control, handleSubmit, reset, watch } = useForm<FormData>({ defaultValues: { message: "" } });
   const watchMessage = watch("message");
@@ -83,7 +84,7 @@ export default function Home() {
     setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, messages: history, title, updatedAt: Date.now() } : c));
 
     try {
-      const res = await fetch("http://localhost:8000/api/chat/", {
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, history: active.messages.slice(-5) }),
