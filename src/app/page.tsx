@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  Menu, Search, Mic, Image as ImageIcon, Send, Loader2, Sparkles, Plus, MessageSquare, Trash2
+  Menu, Search, Mic, Send, Loader2, Sparkles, Plus, MessageSquare, Trash2
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import ReactMarkdown from "react-markdown";
@@ -24,11 +24,111 @@ export default function Home() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/chat/";
 
-  const { control, handleSubmit, reset, watch } = useForm<FormData>({ defaultValues: { message: "" } });
+  const { control, handleSubmit, reset, watch, setValue } = useForm<FormData>({ defaultValues: { message: "" } });
   const watchMessage = watch("message");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const previousTextRef = useRef("");
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceTranscriptRef = useRef("");
+
+  /* ── Speech Recognition ── */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        
+        recognition.onresult = (event: any) => {
+          const transcript = Array.from(event.results)
+            .map((result: any) => result[0].transcript)
+            .join("");
+            
+          setVoiceTranscript(transcript);
+          voiceTranscriptRef.current = transcript;
+
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            if (recognitionRef.current) recognitionRef.current.stop();
+          }, 4000);
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsListening(false);
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          
+          if (voiceTranscriptRef.current) {
+            setValue("message", previousTextRef.current + (previousTextRef.current ? " " : "") + voiceTranscriptRef.current);
+          }
+          setShowVoiceModal(false);
+        };
+
+        recognitionRef.current = recognition;
+      }
+    }
+
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, [setValue]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      previousTextRef.current = watchMessage;
+      setVoiceTranscript("");
+      voiceTranscriptRef.current = "";
+      setShowVoiceModal(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (recognitionRef.current) recognitionRef.current.stop();
+        }, 4000);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const cancelListening = () => {
+    voiceTranscriptRef.current = "";
+    setVoiceTranscript("");
+    setShowVoiceModal(false);
+    if (isListening) {
+      recognitionRef.current?.stop();
+    }
+  };
+
+  const confirmListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+    } else {
+      if (voiceTranscriptRef.current) {
+        setValue("message", previousTextRef.current + (previousTextRef.current ? " " : "") + voiceTranscriptRef.current);
+      }
+      setShowVoiceModal(false);
+    }
+  };
 
   /* ── Persist chats ── */
   useEffect(() => {
@@ -70,6 +170,15 @@ export default function Home() {
   async function onSubmit(data: FormData) {
     const msg = data.message.trim();
     if (!msg || isLoading || !currentChatId) return;
+
+    if (isListening || showVoiceModal) {
+      voiceTranscriptRef.current = "";
+      setVoiceTranscript("");
+      setShowVoiceModal(false);
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    }
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: msg };
     reset({ message: "" });
@@ -222,6 +331,59 @@ export default function Home() {
 
   return (
     <div style={s.root}>
+      {/* Voice Modal */}
+      {showVoiceModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)"
+        }}>
+          <div style={{
+            background: "#fff", width: "90%", maxWidth: "500px", borderRadius: "24px",
+            padding: "32px", boxShadow: "0 24px 40px rgba(0,0,0,0.1)",
+            display: "flex", flexDirection: "column", gap: "24px"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "20px", fontWeight: 500, color: "var(--text-primary)" }}>
+              <div className={isListening ? "animate-pulse" : ""} style={{
+                background: isListening ? "#fce8e6" : "#f1f3f4",
+                color: isListening ? "#ea4335" : "#5f6368",
+                padding: "12px", borderRadius: "50%", display: "flex"
+              }}>
+                <Mic size={28} />
+              </div>
+              {isListening ? "Listening..." : "Stopped"}
+            </div>
+            
+            <div style={{
+              fontSize: "18px", color: voiceTranscript ? "var(--text-primary)" : "#9aa0a6",
+              minHeight: "80px", maxHeight: "200px", overflowY: "auto",
+              padding: "16px", background: "#f8f9fa", borderRadius: "16px",
+              lineHeight: 1.5
+            }}>
+              {voiceTranscript || "Speak now..."}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button 
+                type="button"
+                onClick={cancelListening}
+                style={{ padding: "10px 24px", border: "none", background: "transparent", color: "#5f6368", fontWeight: 500, cursor: "pointer", borderRadius: "24px" }}
+                className="hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={confirmListening}
+                style={{ padding: "10px 24px", border: "none", background: "#1a73e8", color: "#fff", fontWeight: 500, cursor: "pointer", borderRadius: "24px" }}
+                className="hover:bg-blue-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overlay */}
       <div 
         onClick={() => setIsSidebarOpen(false)}
@@ -339,6 +501,7 @@ export default function Home() {
                   <div className="w-2 h-2 rounded-full bg-[#4285f4] animate-bounce" style={{ animationDelay: "0ms" }}></div>
                   <div className="w-2 h-2 rounded-full bg-[#ea4335] animate-bounce" style={{ animationDelay: "150ms" }}></div>
                   <div className="w-2 h-2 rounded-full bg-[#34a853] animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                  <div className="w-2 h-2 rounded-full bg-[#fbbc05] animate-bounce" style={{ animationDelay: "450ms" }}></div>
                 </div>
               </div>
             )}
@@ -372,11 +535,14 @@ export default function Home() {
                 )}
               />
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <button type="button" style={s.iconBtn} className="hover:bg-gray-100">
+                <button 
+                  type="button" 
+                  onClick={toggleListening}
+                  style={s.iconBtn} 
+                  className="hover:bg-gray-100"
+                  title="Voice input"
+                >
                   <Mic size={20} />
-                </button>
-                <button type="button" style={s.iconBtn} className="hover:bg-gray-100">
-                  <ImageIcon size={20} />
                 </button>
                 {watchMessage.trim().length > 0 && (
                   <button type="submit" disabled={!canSend} style={s.sendBtn(canSend)}>
