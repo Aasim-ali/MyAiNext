@@ -23,7 +23,7 @@ export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/chat/";
 
   const { control, handleSubmit, reset, watch } = useForm<FormData>({ defaultValues: { message: "" } });
@@ -108,13 +108,14 @@ export default function Home() {
     } as React.CSSProperties,
 
     sidebar: {
-      position: "fixed" as const, top: 0, left: 0, bottom: 0, zIndex: 30,
-      width: isSidebarOpen ? "280px" : "0px",
-      minWidth: isSidebarOpen ? "280px" : "0px",
+      position: "fixed" as const, top: 0, left: 0, bottom: 0, zIndex: 40,
+      width: "280px",
+      transform: isSidebarOpen ? "translateX(0)" : "translateX(-100%)",
       background: "var(--bg-sidebar)",
       display: "flex", flexDirection: "column" as const,
-      transition: "width 250ms ease, min-width 250ms ease",
+      transition: "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
       overflow: "hidden",
+      boxShadow: isSidebarOpen ? "4px 0 24px rgba(0,0,0,0.15)" : "none",
     },
 
     sidebarInner: {
@@ -145,10 +146,7 @@ export default function Home() {
 
     main: {
       flex: 1, display: "flex", flexDirection: "column" as const,
-      height: "100%", minWidth: 0,
-      marginLeft: isSidebarOpen ? "280px" : "0px",
-      transition: "margin-left 250ms ease",
-      background: "#fff"
+      height: "100%", minWidth: 0, background: "#fff"
     },
 
     header: {
@@ -186,7 +184,8 @@ export default function Home() {
 
     searchWrap: {
       maxWidth: "800px", margin: "0 auto", width: "100%",
-      padding: "0 24px 32px"
+      padding: "16px 24px calc(24px + env(safe-area-inset-bottom))",
+      flexShrink: 0
     },
 
     searchBar: {
@@ -223,6 +222,17 @@ export default function Home() {
 
   return (
     <div style={s.root}>
+      {/* Overlay */}
+      <div 
+        onClick={() => setIsSidebarOpen(false)}
+        style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+          zIndex: 35, opacity: isSidebarOpen ? 1 : 0,
+          pointerEvents: isSidebarOpen ? "auto" : "none",
+          transition: "opacity 300ms ease"
+        }}
+      />
+
       {/* Sidebar */}
       <aside style={s.sidebar}>
         <div style={s.sidebarInner}>
@@ -249,8 +259,8 @@ export default function Home() {
                 </span>
                 <button
                   onClick={e => deleteChat(e, chat.id)}
-                  style={{ border: "none", background: "transparent", cursor: "pointer", color: "#5f6368", opacity: 0 }}
-                  className="group-hover:opacity-100 hover:text-red-500 transition-opacity"
+                  style={{ border: "none", background: "transparent", cursor: "pointer", color: "#9aa0a6" }}
+                  className="hover:text-red-500 transition-colors"
                 >
                   <Trash2 size={16} />
                 </button>
