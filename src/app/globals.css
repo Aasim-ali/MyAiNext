@@ -1,0 +1,80 @@
+
+@import "tailwindcss";
+
+:root {
+  --bg-main: #ffffff;
+  --bg-sidebar: #f8f9fa;
+  --bg-ai: #f0f4f9;
+  --bg-user: #f1f3f4;
+  --text-primary: #1f1f1f;
+  --text-secondary: #444746;
+  --border-color: #dadce0;
+  --accent-blue: #0b57d0;
+  --search-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: 'Google Sans', arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
+
+/* Markdown styling inside AI Overviews */
+.prose p { margin-bottom: 0.8rem; line-height: 1.5; color: var(--text-primary); }
+.prose p:last-child { margin-bottom: 0; }
+.prose code { background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
+.prose pre { background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 1rem; }
+.prose a { color: var(--accent-blue); text-decoration: none; }
+.prose a:hover { text-decoration: underline; }
+.prose ul { padding-left: 20px; margin-bottom: 12px; list-style-type: disc; }
+.prose ol { padding-left: 20px; margin-bottom: 12px; list-style-type: decimal; }
+.prose li { margin-bottom: 6px; }
+
+/* The AI Overview specific styling */
+.ai-overview-box {
+  background: var(--bg-ai);
+  border-radius: 20px;
+  padding: 20px 24px;
+  margin-top: 12px;
+  margin-bottom: 24px;
+}
+
+.ai-overview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.google-sparkle {
+  width: 20px;
+  height: 20px;
+  /* Basic Google AI sparkle icon using SVG inline later or just an image */
+}
+
+/* Search bar focus effect */
+.search-bar-wrap {
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.search-bar-wrap:focus-within {
+  border-color: transparent;
+  box-shadow: var(--search-shadow);
+}
