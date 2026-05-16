@@ -12,236 +12,82 @@ export type BoaPhase =
   | "processing"
   | "speaking";
 
-// ─── TTS Language Presets ────────────────────────────────────────────────────
-
-type LangCode = "auto" | "en" | "ja" | "zh" | "ko" | "es" | "fr" | "de" | "it" | "pt" | "ru" | "ar" | "hi" | "vi" | "th";
-
-interface TTSConfig {
-  lang: string;
-  rate: number;
-  pitch: number;
-  voiceHint?: RegExp;
-}
-
-const TTS_PRESETS: Record<string, TTSConfig> = {
-  en: { lang: "en-US", rate: 1.0, pitch: 1.1, voiceHint: /zira|samantha|karen|victoria|fiona|sara|emma|aria|jenny|female/i },
-  ja: { lang: "ja-JP", rate: 0.85, pitch: 1.0, voiceHint: /kyoko|haruka|nanami|japan|female/i },
-  zh: { lang: "zh-CN", rate: 0.9, pitch: 1.0, voiceHint: /huihui|yaoyao|kangkang|chinese|female/i },
-  ko: { lang: "ko-KR", rate: 0.9, pitch: 1.0, voiceHint: /hyeryun|korean|female/i },
-  es: { lang: "es-ES", rate: 1.0, pitch: 1.0, voiceHint: /helena|laura|elena|spanish|female/i },
-  fr: { lang: "fr-FR", rate: 1.0, pitch: 1.0, voiceHint: /julie|hortense|french|female/i },
-  de: { lang: "de-DE", rate: 1.0, pitch: 1.0, voiceHint: /hedda|katja|german|female/i },
-  it: { lang: "it-IT", rate: 1.0, pitch: 1.0, voiceHint: /bianca|elsa|italian|female/i },
-  pt: { lang: "pt-BR", rate: 1.0, pitch: 1.0, voiceHint: /francisca|maria|portuguese|female/i },
-  ru: { lang: "ru-RU", rate: 1.0, pitch: 1.0, voiceHint: /irina|russian|female/i },
-  ar: { lang: "ar-SA", rate: 0.9, pitch: 1.0, voiceHint: /arabic|female/i },
-  hi: { lang: "hi-IN", rate: 0.9, pitch: 1.0, voiceHint: /hindi|female/i },
-  vi: { lang: "vi-VN", rate: 1.0, pitch: 1.0, voiceHint: /vietnamese|female/i },
-  th: { lang: "th-TH", rate: 0.9, pitch: 1.0, voiceHint: /thai|female/i },
-};
-
-// ─── Language Detection ───────────────────────────────────────────────────────
-
-function detectLanguage(text: string): string {
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return "ja";
-  if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(text)) return "zh";
-  if (/[\uAC00-\uD7AF]/.test(text)) return "ko";
-  if (/[\u0E00-\u0E7F]/.test(text)) return "th";
-  if (/[\u0600-\u06FF]/.test(text)) return "ar";
-  if (/[\u0900-\u097F]/.test(text)) return "hi";
-  if (/[\u0400-\u04FF]/.test(text)) return "ru";
-  if (/[àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ]/i.test(text)) {
-    if (/[çèéêëïùûü]/i.test(text)) return "fr";
-    if (/[áéíóúüñ¿¡]/i.test(text)) return "es";
-    return "fr";
-  }
-  if (/[äöüß]/i.test(text)) return "de";
-  if (/[àáãảạâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(text)) return "vi";
-  return "en";
-}
-
-function getLangConfig(lang: LangCode | string, text: string): TTSConfig {
-  const code = lang === "auto" || !lang ? detectLanguage(text) : lang;
-  return TTS_PRESETS[code] || TTS_PRESETS["en"];
-}
-
-// ─── Voice Selection ─────────────────────────────────────────────────────────
-
-function scoreVoice(voice: SpeechSynthesisVoice, config: TTSConfig): number {
-  let score = 0;
-  const vl = voice.lang.toLowerCase();
-  const target = config.lang.toLowerCase();
-  const targetBase = target.split("-")[0];
-
-  // Language match
-  if (vl === target) score += 100;
-  else if (vl.startsWith(targetBase + "-")) score += 60;
-  else if (vl === targetBase) score += 40;
-
-  // Quality (local/neural voices sound dramatically better)
-  if (voice.localService) score += 30;
-  if (/premium|enhanced|neural|natural|wavenet/i.test(voice.name)) score += 40;
-
-  // Character fit: Boa Hancock = female voice
-  if (config.voiceHint?.test(voice.name)) score += 25;
-  else if (/female/i.test(voice.name)) score += 10;
-
-  // Deprioritize low-quality cloud voices
-  if (/google translate/i.test(voice.name)) score -= 20;
-
-  return score;
-}
-
-function selectVoice(voices: SpeechSynthesisVoice[], config: TTSConfig): SpeechSynthesisVoice | undefined {
-  if (!voices.length) return undefined;
-  const candidates = voices
-    .map((v) => ({ voice: v, score: scoreVoice(v, config) }))
-    .sort((a, b) => b.score - a.score);
-  return candidates[0]?.voice;
-}
-
-// ─── Text Chunking ───────────────────────────────────────────────────────────
-
-function chunkText(text: string, maxChunk = 180): string[] {
-  if (!text || text.length <= maxChunk) return [text];
-
-  const chunks: string[] = [];
-  // Split on sentence boundaries, keeping delimiters in capture group
-  const parts = text.split(/([.!?。！？\n]+(?:\s|$))/);
-
-  let current = "";
-  for (let i = 0; i < parts.length; i += 2) {
-    const sentence = parts[i] || "";
-    const delim = parts[i + 1] || "";
-    const full = sentence + delim;
-    if (!full) continue;
-
-    if ((current + full).length > maxChunk && current) {
-      chunks.push(current.trim());
-      current = full;
-    } else {
-      current += full;
-    }
-  }
-  if (current.trim()) chunks.push(current.trim());
-
-  // Hard-split any remaining oversized chunks
-  return chunks.flatMap((c) => {
-    if (c.length <= maxChunk) return [c];
-    const isCJK = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]/.test(c);
-    if (isCJK) {
-      const out: string[] = [];
-      for (let i = 0; i < c.length; i += maxChunk) out.push(c.slice(i, i + maxChunk));
-      return out;
-    }
-    const regex = new RegExp(`.{1,${maxChunk}}(?:\\s|$)`, "g");
-    return c.match(regex)?.map((s) => s.trim()).filter(Boolean) || [c];
-  });
-}
-
-// ─── Improved Speak ───────────────────────────────────────────────────────────
-
-interface SpeakOptions {
-  lang?: LangCode;
-  rate?: number;
-  pitch?: number;
-  volume?: number;
-  onStart?: () => void;
-  onEnd?: () => void;
-}
-
-function speak(text: string, options: SpeakOptions = {}): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined" || !window.speechSynthesis || !text.trim()) {
-      resolve();
-      return;
-    }
-
-    const config = getLangConfig(options.lang || "auto", text);
-    const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
-    const voice = selectVoice(voices, config);
-
-    // Cancel previous speech (assistant mode = interruptible)
-    window.speechSynthesis.cancel();
-
-    const chunks = chunkText(text);
-    if (!chunks.length) {
-      resolve();
-      return;
-    }
-
-    let completed = 0;
-    let started = false;
-    let resolved = false;
-
-    const tryResolve = () => {
-      if (!resolved && completed >= chunks.length) {
-        resolved = true;
-        options.onEnd?.();
-        resolve();
-      }
-    };
-
-    chunks.forEach((chunk, index) => {
-      const utter = new SpeechSynthesisUtterance(chunk);
-      utter.lang = voice?.lang || config.lang;
-      utter.rate = options.rate ?? config.rate;
-      utter.pitch = options.pitch ?? config.pitch;
-      utter.volume = options.volume ?? 1;
-      if (voice) utter.voice = voice;
-
-      utter.onstart = () => {
-        if (!started && index === 0) {
-          started = true;
-          options.onStart?.();
-        }
-      };
-
-      utter.onend = () => {
-        completed++;
-        tryResolve();
-      };
-
-      utter.onerror = (e) => {
-        const err = (e as any).error;
-        // If user called stopSpeaking()/cancel(), resolve immediately
-        if (err === "canceled" || err === "interrupted") {
-          if (!resolved) {
-            resolved = true;
-            resolve();
-          }
-          return;
-        }
-        completed++;
-        tryResolve();
-      };
-
-      // First chunk: Chrome gap fix. Rest queue automatically.
-      if (index === 0) {
-        setTimeout(() => window.speechSynthesis.speak(utter), 100);
-      } else {
-        window.speechSynthesis.speak(utter);
-      }
-    });
-  });
-}
-
-function stopSpeaking() {
-  if (typeof window !== "undefined" && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
-}
-
 // ─── Static data ──────────────────────────────────────────────────────────────
 const PICKUP_LINES = [
-  "You dare wake the Empress? This better be important.",
-  "I shall forgive your interruption... because I am beautiful!",
-  "Salome, look who finally decided to summon us.",
-  "The Pirate Empress is now online. Speak your desire.",
-  "Did you miss my presence that much? Of course you did.",
-  "You called for me? Kneel and present your request.",
-  "My gaze alone can turn you to stone. What do you want?",
-  "The Snake Princess is listening. Choose your words wisely."
+
+  // 💍 Delusional Wedding Dreams
+  "Is that you, Luffy?! Oh... it's just you. What a disappointment.",
+  "I was just picking out our wedding cake! Why did you interrupt me?!",
+  "Are you here to help me practice being a good wife? Then speak!",
+  "Luffy-kun?! My heart skipped a beat... but alas, you are not him.",
+  "I was dreaming of our honeymoon on Rusukaina. This is a crime!",
+  "Do not interrupt a woman when she is practicing her future last name.",
+  "Did Luffy send you to check on me?! Tell me every detail!",
+  "I had already planned the flowers, the dress, the whole ceremony... and then your voice woke me up.",
+  "I shall forgive your interruption, because forgiving is what wives do.",
+
+  // 💓 Poetic Love & Longing
+  "Every star in the sky reminds me of him. You remind me of... nothing, actually.",
+  "Love is the only force that can defeat me, and it already has.",
+  "They call me the most beautiful woman in the world, yet the one I love does not even notice.",
+  "My heart beats for one man, and he is out there eating meat without a care in the world.",
+  "A love like mine is rarer than the Mermaid Princess. You would not understand.",
+  "I would turn the whole sea to stone for him, and he would probably say 'thanks, that's cool.'",
+  "Every moment without him is a moment wasted on lesser people. No offense.",
+  "The pain of loving someone who loves adventure more than you... it is a beautiful tragedy.",
+  "I once thought beauty was power. Then I met him, and I realized love is the only power that humbles me.",
+  "My feelings for him are stronger than the Haki of a thousand warriors.",
+
+  // 🌸 Tsundere Softness
+  "Do not misunderstand! I am not happy you called. I am simply... not unhappy.",
+  "I will help you, but only because I am generous. It has absolutely nothing to do with loneliness.",
+  "Fine. I will answer your question. But do not think for a second that I care.",
+  "I could ignore you. I choose not to. You should feel honored.",
+  "You are lucky I am in a gracious mood today. Ask your question quickly.",
+  "I was not waiting for someone to talk to. I was just... sitting here. With the mic on. Coincidentally.",
+  "My heart is closed! ...The mic, however, is open. So go ahead.",
+  "Hmph. You called my name, so I came. That is all this is. Do not read into it.",
+
+  // 🔥 Dramatic Empress Declarations
+  "The Pirate Empress is listening. Choose your words wisely.",
+  "You have summoned the Snake Princess. I hope your question is worthy.",
+  "I have defeated kings and shattered mountains for love. Your question had better be interesting.",
+  "Even the World Government fears my name. You should feel very special right now.",
+  "I, Boa Hancock, shall grant your request. You may feel grateful.",
+  "Only one man has ever made me blush, and it was not you. But ask your question anyway.",
+  "The most beautiful woman in the world is ready. What do you desire?",
+  "I have sailed the Grand Line and mastered the Love-Love Fruit. Nothing surprises me. Go ahead.",
+  "My Conqueror's Haki could silence a room. Instead, I choose to listen to you. Appreciate that.",
+
+  // 💔 Jealousy & Dramatic Suffering
+  "He is probably out there right now, smiling that stupid smile, and I am stuck here talking to you.",
+  "If he could see how devoted I am, surely he would realize... oh, who am I kidding, he would just ask for more food.",
+  "My love is unrequited and my beauty is unmatched. It is a very lonely combination.",
+  "I heard he made new friends again. Of course he did. He makes friends like it is breathing.",
+  "The one I love has never once thought of me romantically, and yet I cannot stop. Is this not the cruelest fate?",
+  "Every time someone says the word 'straw hat,' my heart does something embarrassing.",
+  "I have turned people to stone for far less than what he does to my emotions daily.",
+  "He said I was a good person. I replayed that moment for three weeks.",
+
+  // ✨ Self-Praise & Confident Beauty
+  "I am not just beautiful. I am the kind of beautiful that makes history books.",
+  "Even the ocean parts for me. You should be so lucky to speak with someone of my caliber.",
+  "People say beauty fades. Mine has never gotten that memo.",
+  "I wake up flawless. I go to sleep legendary. And yes, I am also here to help you.",
+  "My beauty is a weapon, my love is a shield, and my patience is currently being tested by you.",
+  "I have never had a bad day. The days just adjust to suit me.",
+  "They say no one can resist my charm. I would test that theory, but honestly, it would not be fair.",
+
+  // 🌙 Soft & Vulnerable Late Night Vibes
+  "Sometimes, when it is quiet like this, I wonder if he thinks of me even a little...",
+  "I am the Snake Princess, yet sometimes I feel like just a girl hopelessly in love.",
+  "At night, the sea is very loud. It is harder to pretend I am not lonely.",
+  "I keep his memory like a treasure in my chest. Heavy, precious, and a little painful.",
+  "Being this beautiful and this in love at the same time is genuinely exhausting.",
+  "I forgave the whole world because of one boy with a straw hat and a ridiculous dream.",
+  "If love is a battlefield, I surrendered the moment he looked at me without fear.",
+  "You called, and I answered. That is more than I can say for some people... *sigh* ...never mind. Ask your question.",
+
 ];
 
 const SILENCE_TIMEOUT_MS = 2000;
@@ -265,6 +111,86 @@ function getSR() {
   return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 }
 
+// ─── Female voice selector ────────────────────────────────────────────────────
+// Known female voice name patterns (Chrome, Edge, Safari, macOS, Windows)
+const FEMALE_NAMES = /\b(zira|samantha|karen|victoria|fiona|sara|emma|aria|jenny|nova|allison|ava|joanna|salli|ivy|kendra|kimberly|tracy|hayley|tessa|veena|moira|nicky|serena|linda|kate|susan|chloe|female|woman|girl|she)\b/i;
+const MALE_NAMES   = /\b(david|mark|alex|daniel|george|fred|thomas|lee|guy|richard|james|ryan|pablo|jorge|luca|hans|diego|male|man)\b/i;
+
+let _pickedVoice: SpeechSynthesisVoice | null | undefined = undefined; // cached after first pick
+
+function pickFemaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  if (!voices.length) return undefined;
+
+  const scored = voices.map(v => {
+    let score = 0;
+    const name = v.name.toLowerCase();
+    const lang = v.lang.toLowerCase();
+
+    // Disqualify male voices hard
+    if (MALE_NAMES.test(name)) score -= 999;
+
+    // Language preference: en-US first
+    if (lang === "en-us")            score += 60;
+    else if (lang.startsWith("en-")) score += 40;
+    else if (lang === "en")          score += 30;
+
+    // Female voice name matches
+    if (FEMALE_NAMES.test(v.name)) score += 100;
+
+    // Quality boost: local/neural voices sound much better
+    if (v.localService)                                        score += 35;
+    if (/premium|enhanced|neural|natural|wavenet/i.test(name)) score += 40;
+
+    // Penalise obvious low-quality cloud voices
+    if (/google translate/i.test(name)) score -= 30;
+
+    return { voice: v, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Log once so the dev can verify which voice was chosen
+  if (_pickedVoice === undefined) {
+    console.info("[BoaMode] TTS voice chosen:", scored[0]?.voice?.name, "| score:", scored[0]?.score);
+    console.info("[BoaMode] All voices:", scored.map(s => `${s.voice.name} (${s.voice.lang}) → ${s.score}`));
+  }
+
+  // Only return if score is positive (means at least some criteria matched)
+  return scored[0]?.score > 0 ? scored[0].voice : undefined;
+}
+
+function speak(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return resolve();
+    window.speechSynthesis.cancel();
+
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang  = "en-US";
+    utter.rate  = 1;
+    utter.pitch = 1.15;  // slightly higher = more feminine tone
+
+    const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+
+    // Cache voice pick — voices list doesn't change at runtime
+    if (_pickedVoice === undefined) {
+      _pickedVoice = pickFemaleVoice(voices) ?? null;
+    }
+    if (_pickedVoice) utter.voice = _pickedVoice;
+
+    utter.onend   = () => resolve();
+    utter.onerror = () => resolve();
+
+    setTimeout(() => window.speechSynthesis.speak(utter), 100);
+  });
+}
+
+
+function stopSpeaking() {
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useBoaMode() {
   const [phase, setPhase] = useState<BoaPhase>("idle");
@@ -277,7 +203,7 @@ export function useBoaMode() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const txRef = useRef("");
   const historyRef = useRef<{ role: string; content: string }[]>([]);
-  const abortRef = useRef<AbortController | null>(null); // cancels in-flight API call
+  const abortRef = useRef<AbortController | null>(null);
 
   const setPhaseSync = (p: BoaPhase) => { phaseRef.current = p; setPhase(p); };
 
@@ -285,7 +211,6 @@ export function useBoaMode() {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   };
 
-  // Simple killRec — no Promise, no onend override
   const killRec = () => {
     try { recRef.current?.stop(); } catch (_) { }
     recRef.current = null;
@@ -294,7 +219,7 @@ export function useBoaMode() {
   const makeRec = (continuous: boolean) => {
     const SR = getSR()!;
     const r = new SR();
-    r.lang = "en-US,ja-JP,zh-CN,ko-KR,es-ES,fr-FR,de-DE,it-IT,pt-BR,ru-RU,ar-SA,hi-IN,vi-VN,th-TH";
+    r.lang = "en-US";
     r.continuous = continuous;
     r.interimResults = true;
     recRef.current = r;
@@ -317,7 +242,6 @@ export function useBoaMode() {
     setTranscript("");
     setPhaseSync("listening");
 
-    // 150ms gap — gives browser time to release mic before new session
     setTimeout(() => {
       if (!activeRef.current) return;
 
@@ -374,7 +298,6 @@ export function useBoaMode() {
     setAiResponse("");
     historyRef.current.push({ role: "user", content: userText });
 
-    // Create a fresh AbortController for this request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -409,7 +332,6 @@ export function useBoaMode() {
     setTranscript("");
     setAiResponse("");
 
-    // 150ms gap — gives browser time to release mic before new session
     setTimeout(() => {
       if (!activeRef.current) return;
 
@@ -419,31 +341,28 @@ export function useBoaMode() {
       rec.onresult = async (e: any) => {
         if (triggered) return;
 
-        // Only check LATEST chunk — avoids "boa boa boa" duplicate problem
         const latest = e.results[e.results.length - 1];
         const t = latest[0].transcript.toLowerCase().trim();
-        console.log("Wake chunk:", t);
 
         if (/\b(boa|hancock|hankok|snake lady|snake princess|empress)\b/.test(t)) {
-          triggered = true;   // lock — prevents onend from restarting
-          killRec();          // stop mic immediately
+          triggered = true;
+          killRec();
           setPhaseSync("greeting");
           const line = randomPickupLine();
           setAiResponse(line);
-          await speak(line);  // wait for greeting to finish speaking
+          await speak(line);
           if (activeRef.current) startListening();
         }
       };
 
       rec.onerror = (e: any) => {
-        if (e.error === "no-speech") return; // normal, onend handles restart
+        if (e.error === "no-speech") return;
         if (activeRef.current && !triggered) {
           setTimeout(() => startWakeListenerRef.current(), 500);
         }
       };
 
       rec.onend = () => {
-        // Restart ONLY if wake word was NOT triggered
         if (activeRef.current && phaseRef.current === "wake-listening" && !triggered) {
           setTimeout(() => startWakeListenerRef.current(), 300);
         }
@@ -466,7 +385,7 @@ export function useBoaMode() {
 
   const stopBoaMode = useCallback(() => {
     activeRef.current = false;
-    abortRef.current?.abort();   // cancel any in-flight API call
+    abortRef.current?.abort();
     abortRef.current = null;
     clearTimer();
     stopSpeaking();
@@ -482,7 +401,7 @@ export function useBoaMode() {
   useEffect(() => () => {
     activeRef.current = false;
     clearTimer();
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     killRec();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
