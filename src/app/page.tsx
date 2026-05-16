@@ -7,17 +7,26 @@ import { FormData, Message } from "../types";
 import { sendMessage } from "../services/api";
 import { useChats } from "../hooks/useChats";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { useBoaMode } from "../hooks/useBoaMode";
 
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import ChatArea from "../components/ChatArea";
 import MessageInput from "../components/MessageInput";
 import VoiceModal from "../components/VoiceModal";
+import BoaMode from "../components/BoaMode";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isBoaActive, phase, transcript, aiResponse, startBoaMode, stopBoaMode } = useBoaMode();
+
+  const handleBoaToggle = () => {
+    if (isBoaActive) stopBoaMode();
+    else startBoaMode();
+  };
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleStop = () => {
@@ -131,8 +140,22 @@ export default function Home() {
         isOpen={isSidebarOpen}
       />
 
+      {/* Boa Voice Mode Overlay */}
+      {isBoaActive && (
+        <BoaMode
+          phase={phase}
+          transcript={transcript}
+          aiResponse={aiResponse}
+          onExit={stopBoaMode}
+        />
+      )}
+
       <div style={s.main}>
-        <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+        <Header
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          onBoaToggle={handleBoaToggle}
+          isBoaActive={isBoaActive}
+        />
         
         <ChatArea
           currentChat={activeChat}
