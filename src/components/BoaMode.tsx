@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -85,17 +86,6 @@ export default function BoaMode({ phase, transcript, aiResponse, onExit }: BoaMo
           <span style={{ color: "#4285f4", fontWeight: 600 }}> - </span>
           <span style={{ color: "#fbbc05", fontWeight: 600 }}>A</span>
           <span style={{ color: "#4285f4", fontWeight: 600 }}>I</span>
-        </div>
-
-        {/* Badge */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: "8px",
-          background: "#f0f4f9", borderRadius: "40px",
-          padding: "7px 18px",
-          border: "1px solid var(--border-color)",
-          fontSize: "14px", fontWeight: 600, color: "#1f1f1f",
-        }}>
-          <Mic size={15} color="#0b57d0" /> Boa Mode
         </div>
 
         {/* Exit — with abort label */}

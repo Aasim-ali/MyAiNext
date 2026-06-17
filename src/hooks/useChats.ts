@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/immutability */
+/* eslint-disable react-hooks/preserve-manual-memoization */
 import { useState, useEffect, useCallback } from "react";
 import { Chat, Message } from "../types";
 

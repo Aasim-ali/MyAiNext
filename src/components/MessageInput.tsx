@@ -1,7 +1,8 @@
-import { Search, Mic, Send, Loader2, Square } from "lucide-react";
+import { Search, Mic, Send, Square } from "lucide-react";
 import { Control, Controller } from "react-hook-form";
 import { themeStyles as s } from "../styles/theme";
 import { FormData } from "../types";
+import { useRef } from "react";
 
 type MessageInputProps = {
   control: Control<FormData>;
@@ -14,9 +15,19 @@ type MessageInputProps = {
 };
 
 export default function MessageInput({ control, watchMessage, isLoading, canSend, onSubmit, onToggleListening, onStop }: MessageInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleSubmit = () => {
+    onSubmit();
+    // Reset height after submit
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  };
+
   return (
     <div style={s.searchWrap}>
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
         <div style={s.searchBar} className="search-bar-wrap">
           <Search size={22} color="#9aa0a6" />
           <Controller
@@ -25,13 +36,17 @@ export default function MessageInput({ control, watchMessage, isLoading, canSend
             render={({ field }) => (
               <textarea
                 {...field}
+                ref={(el) => {
+                  field.ref(el);
+                  textareaRef.current = el;
+                }}
                 rows={1}
                 placeholder="Ask anything..."
                 style={s.searchInput}
                 onKeyDown={e => {
                   if (e.key === "Enter" && !e.shiftKey) { 
                     e.preventDefault(); 
-                    onSubmit(); 
+                    handleSubmit(); 
                   }
                 }}
                 onInput={e => {
